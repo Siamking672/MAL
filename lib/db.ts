@@ -67,13 +67,18 @@ export async function getCache<T>(key: string): Promise<{ value: T; updatedAt: s
 export async function setCache<T>(key: string, value: T) {
   await ensureSchema();
   const updatedAt = new Date().toISOString();
+
+  // JSON.stringify(undefined) returns undefined, which violates the NOT NULL
+  // constraint in Turso. Store JSON null instead of letting SQLite receive NULL.
+  const serializedValue = JSON.stringify(value ?? null) ?? "null";
+
   await getTurso().execute({
     sql: `
       INSERT INTO cache_entries (key, value, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `,
-    args: [key, JSON.stringify(value), updatedAt]
+    args: [key, serializedValue, updatedAt]
   });
   return updatedAt;
 }

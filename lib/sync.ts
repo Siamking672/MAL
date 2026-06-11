@@ -12,6 +12,17 @@ export async function getSavedUsername() {
   return settings?.value?.username || defaultUsername();
 }
 
+export async function getSettingsInfo() {
+  const username = await getSavedUsername();
+  if (!username) return { username: "", lastSyncedAt: undefined as string | undefined };
+
+  const lastSyncCache = await getCache<{ syncedAt?: string }>(`last-sync:${username}`);
+  return {
+    username,
+    lastSyncedAt: lastSyncCache?.value?.syncedAt || lastSyncCache?.updatedAt
+  };
+}
+
 export async function saveUsername(username: string) {
   const clean = username.trim();
   if (!clean) throw new Error("Username is required");

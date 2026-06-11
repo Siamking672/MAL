@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { getDashboard, getSavedUsername, saveUsername } from "@/lib/sync";
+import { getSettingsInfo, saveUsername } from "@/lib/sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const dashboard = await getDashboard(false);
-    const username = await getSavedUsername();
-    return NextResponse.json({ username, lastSyncedAt: dashboard.lastSyncedAt });
+    const settings = await getSettingsInfo();
+    return NextResponse.json(settings);
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to read settings" },

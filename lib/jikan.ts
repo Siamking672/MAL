@@ -1,6 +1,6 @@
 import type { MediaItem, MediaKind, NormalizedProfile } from "@/lib/types";
 
-const BASE_URL = process.env.JIKAN_BASE_URL || "https://api.jikan.moe/v4";
+const BASE_URL = (process.env.JIKAN_BASE_URL || "https://api.jikan.moe/v4").replace(/\/$/, "");
 
 const animeStatuses: Record<string, { label: string; key: string }> = {
   "1": { label: "Watching", key: "watching" },
@@ -62,6 +62,13 @@ export async function requestJikan<T>(path: string): Promise<T> {
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
+    const userPathMatch = path.match(/^\/users\/([^/]+)/);
+    if (response.status === 404 && userPathMatch) {
+      const username = decodeURIComponent(userPathMatch[1]);
+      throw new Error(
+        `Jikan could not find the public MyAnimeList profile/list for "${username}". Check the exact MAL username and make sure the profile and lists are public.`
+      );
+    }
     throw new Error(`Jikan request failed ${response.status}: ${text || response.statusText}`);
   }
 
