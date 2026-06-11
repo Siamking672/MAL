@@ -105,3 +105,8 @@ npx wrangler secret put CACHE_TTL_SECONDS
 ```
 
 Full deployment steps are in `CLOUDFLARE_DEPLOY.md`.
+
+
+## Cloudflare/Turso import note
+
+This project imports Turso with `@libsql/client/web` because Cloudflare Workers need the web driver. Do not change it back to `@libsql/client`, or OpenNext/Cloudflare may fail while bundling the Worker.

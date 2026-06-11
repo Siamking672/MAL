@@ -79,3 +79,8 @@ Cloudflare Dashboard → Workers & Pages → your Worker → Settings → Domain
 - The app uses Turso as cache storage.
 - Jikan is public/read-only, so there is no MAL OAuth login in this version.
 - The Settings page can save a MAL username into Turso and run manual sync.
+
+
+## Cloudflare/Turso import note
+
+This project imports Turso with `@libsql/client/web` because Cloudflare Workers need the web driver. Do not change it back to `@libsql/client`, or OpenNext/Cloudflare may fail while bundling the Worker.
