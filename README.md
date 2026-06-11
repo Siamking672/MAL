@@ -110,3 +110,8 @@ Full deployment steps are in `CLOUDFLARE_DEPLOY.md`.
 ## Cloudflare/Turso import note
 
 This project uses Turso SQL-over-HTTP directly with `fetch`, so no native database driver is bundled into the Cloudflare Worker.
+
+
+## v9 note
+
+This build adds a MyAnimeList public `load.json` list fallback, so anime/manga entries can load when Jikan profile stats work but Jikan user-list endpoints return empty.

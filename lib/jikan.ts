@@ -196,6 +196,83 @@ export async function fetchMalXmlList(username: string, kind: MediaKind): Promis
     .filter((item): item is MediaItem => Boolean(item));
 }
 
+
+function normalizeMalLoadJsonItem(raw: any, kind: MediaKind): MediaItem | null {
+  const isAnime = kind === "anime";
+  const id = Number(raw?.anime_id ?? raw?.manga_id ?? raw?.id ?? 0);
+  if (!id) return null;
+
+  const status = statusFor(kind, raw?.status);
+  const title = String(raw?.anime_title ?? raw?.manga_title ?? raw?.title ?? "Untitled");
+  const image = raw?.anime_image_path ?? raw?.manga_image_path ?? raw?.image_url ?? raw?.image;
+  const progress = Number(isAnime ? raw?.num_watched_episodes : raw?.num_read_chapters) || 0;
+  const total = Number(isAnime ? raw?.anime_num_episodes : raw?.manga_num_chapters) || undefined;
+  const mediaUrl = raw?.anime_url ?? raw?.manga_url;
+
+  return {
+    id,
+    kind,
+    title,
+    url: mediaUrl ? `${MAL_WEB_BASE}${mediaUrl}` : `${MAL_WEB_BASE}/${kind}/${id}`,
+    image,
+    mediaType: raw?.anime_media_type_string ?? raw?.manga_media_type_string ?? raw?.media_type,
+    status: status.label,
+    statusKey: status.key,
+    score: Number(raw?.score || 0) || 0,
+    progress,
+    total,
+    progressLabel: total ? `${progress}/${total}` : String(progress || 0),
+    updatedAt: raw?.updated_at,
+    userStartDate: toSafeDate(raw?.start_date_string || raw?.start_date),
+    userEndDate: toSafeDate(raw?.finish_date_string || raw?.finish_date)
+  };
+}
+
+export async function fetchMalLoadJsonList(username: string, kind: MediaKind): Promise<MediaItem[]> {
+  // MyAnimeList's public list UI loads entries from this JSON endpoint.
+  // status=7 means all statuses. It often works even when Jikan's user-list endpoint returns empty.
+  const basePath = kind === "anime" ? "animelist" : "mangalist";
+  const items: MediaItem[] = [];
+  const seen = new Set<number>();
+  let offset = 0;
+  const pageSize = 300;
+
+  while (offset < 10000) {
+    const url = `${MAL_WEB_BASE}/${basePath}/${encodeURIComponent(username)}/load.json?offset=${offset}&status=7`;
+    const response = await fetch(url, {
+      headers: {
+        Accept: "application/json,text/javascript,*/*;q=0.01",
+        "User-Agent": "Mozilla/5.0 (compatible; mal-dashboard/1.0)",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: `${MAL_WEB_BASE}/${basePath}/${encodeURIComponent(username)}?status=7`
+      },
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(`MyAnimeList public ${kind} JSON fallback failed ${response.status}: ${response.statusText}`);
+    }
+
+    const payload = await response.json().catch(() => null) as any;
+    const data = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
+    if (!data.length) break;
+
+    for (const raw of data) {
+      const item = normalizeMalLoadJsonItem(raw, kind);
+      if (item && !seen.has(item.id)) {
+        seen.add(item.id);
+        items.push(item);
+      }
+    }
+
+    if (data.length < pageSize) break;
+    offset += pageSize;
+    await sleep(450);
+  }
+
+  return items;
+}
+
 export function normalizeProfile(raw: any): NormalizedProfile {
   const data = raw?.data || raw || {};
   return {

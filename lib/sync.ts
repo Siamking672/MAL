@@ -1,5 +1,5 @@
 import { getCache, setCache } from "@/lib/db";
-import { fetchMalXmlList, fetchPaginatedList, normalizeMediaList, normalizeProfile, requestJikan } from "@/lib/jikan";
+import { fetchMalLoadJsonList, fetchMalXmlList, fetchPaginatedList, normalizeMediaList, normalizeProfile, requestJikan } from "@/lib/jikan";
 import type { DashboardPayload, MediaItem, MediaKind, NormalizedProfile } from "@/lib/types";
 import { buildStats, isFresh } from "@/lib/utils";
 
@@ -36,6 +36,13 @@ async function safeFetchList(username: string, kind: MediaKind, path: string) {
     if (jikanItems.length > 0) return normalizeMediaList(jikanItems, kind);
   } catch (error) {
     console.warn(`Jikan ${kind} list failed:`, error instanceof Error ? error.message : error);
+  }
+
+  try {
+    const malJsonItems = await fetchMalLoadJsonList(username, kind);
+    if (malJsonItems.length > 0) return malJsonItems;
+  } catch (error) {
+    console.warn(`MAL public JSON ${kind} fallback failed:`, error instanceof Error ? error.message : error);
   }
 
   try {
