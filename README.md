@@ -49,9 +49,9 @@ file:local.db
 ## Turso setup
 
 ```bash
-turso db create mal-dashboard
-turso db show mal-dashboard
-turso db tokens create mal-dashboard
+turso db create siam-chowdhury
+turso db show siam-chowdhury
+turso db tokens create siam-chowdhury
 ```
 
 Put the database URL and auth token in `.env.local` or `.dev.vars`.
