@@ -1,23 +1,45 @@
 import { createClient } from "@libsql/client/web";
 
+// Create the Turso client lazily. Next.js imports route files during `next build`
+// to collect metadata, but Cloudflare secrets are runtime values. Creating the
+// client at module import time makes the build try to use a fallback file: URL,
+// which the Cloudflare/web libSQL driver does not support.
+type TursoClient = ReturnType<typeof createClient>;
+
 type CacheRow = {
   value: string;
   updated_at: string;
 };
 
-const databaseUrl = process.env.TURSO_DATABASE_URL || "file:local.db";
-const authToken = process.env.TURSO_AUTH_TOKEN || undefined;
-
-export const turso = createClient({
-  url: databaseUrl,
-  authToken: databaseUrl.startsWith("file:") ? undefined : authToken
-});
-
+let tursoClient: TursoClient | null = null;
 let schemaReady = false;
+
+function getDatabaseConfig() {
+  const url = process.env.TURSO_DATABASE_URL?.trim();
+  const authToken = process.env.TURSO_AUTH_TOKEN?.trim();
+
+  if (!url) {
+    throw new Error("Missing TURSO_DATABASE_URL. Add it in Cloudflare Workers → Settings → Variables and Secrets.");
+  }
+
+  if (url.startsWith("file:")) {
+    throw new Error("TURSO_DATABASE_URL cannot be a file: URL on Cloudflare. Use your remote Turso URL, for example libsql://your-db.turso.io.");
+  }
+
+  return { url, authToken: authToken || undefined };
+}
+
+function getTurso() {
+  if (!tursoClient) {
+    const { url, authToken } = getDatabaseConfig();
+    tursoClient = createClient({ url, authToken });
+  }
+  return tursoClient;
+}
 
 export async function ensureSchema() {
   if (schemaReady) return;
-  await turso.execute(`
+  await getTurso().execute(`
     CREATE TABLE IF NOT EXISTS cache_entries (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -29,7 +51,7 @@ export async function ensureSchema() {
 
 export async function getCache<T>(key: string): Promise<{ value: T; updatedAt: string } | null> {
   await ensureSchema();
-  const result = await turso.execute({
+  const result = await getTurso().execute({
     sql: "SELECT value, updated_at FROM cache_entries WHERE key = ? LIMIT 1",
     args: [key]
   });
@@ -45,7 +67,7 @@ export async function getCache<T>(key: string): Promise<{ value: T; updatedAt: s
 export async function setCache<T>(key: string, value: T) {
   await ensureSchema();
   const updatedAt = new Date().toISOString();
-  await turso.execute({
+  await getTurso().execute({
     sql: `
       INSERT INTO cache_entries (key, value, updated_at)
       VALUES (?, ?, ?)
