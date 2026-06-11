@@ -1,9 +1,9 @@
-import { createClient } from "@libsql/client/web";
+import { createClient } from "@tursodatabase/serverless/compat";
 
 // Create the Turso client lazily. Next.js imports route files during `next build`
 // to collect metadata, but Cloudflare secrets are runtime values. Creating the
 // client at module import time makes the build try to use a fallback file: URL,
-// which the Cloudflare/web libSQL driver does not support.
+// which the Cloudflare/serverless Turso driver does not support.
 type TursoClient = ReturnType<typeof createClient>;
 
 type CacheRow = {
