@@ -51,10 +51,10 @@ export async function ensureSchema() {
 
 export async function getCache<T>(key: string): Promise<{ value: T; updatedAt: string } | null> {
   await ensureSchema();
-  const result = await getTurso().execute({
-    sql: "SELECT value, updated_at FROM cache_entries WHERE key = ? LIMIT 1",
-    args: [key]
-  });
+  const result = await getTurso().execute(
+    "SELECT value, updated_at FROM cache_entries WHERE key = ? LIMIT 1",
+    [key]
+  );
   const row = result.rows[0] as unknown as CacheRow | undefined;
   if (!row) return null;
   try {
@@ -70,15 +70,17 @@ export async function setCache<T>(key: string, value: T) {
 
   // JSON.stringify(undefined) returns undefined, which violates the NOT NULL
   // constraint in Turso. Store JSON null instead of letting SQLite receive NULL.
+  // Use execute(sql, args), not execute({ sql, args }), because the Turso
+  // serverless compat driver can ignore the object-form bind args in Workers.
   const serializedValue = JSON.stringify(value ?? null) ?? "null";
 
-  await getTurso().execute({
-    sql: `
+  await getTurso().execute(
+    `
       INSERT INTO cache_entries (key, value, updated_at)
       VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
     `,
-    args: [key, serializedValue, updatedAt]
-  });
+    [key, serializedValue, updatedAt]
+  );
   return updatedAt;
 }
