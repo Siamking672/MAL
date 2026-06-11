@@ -1,0 +1,6 @@
+NEXTJS_ENV=development
+MAL_USERNAME=your_mal_username
+TURSO_DATABASE_URL=libsql://your-db-name-your-org.turso.io
+TURSO_AUTH_TOKEN=your_turso_auth_token
+JIKAN_BASE_URL=https://api.jikan.moe/v4
+CACHE_TTL_SECONDS=21600

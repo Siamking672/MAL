@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+.env*.local
+local.db
+.DS_Store
+.open-next
+.dev.vars
