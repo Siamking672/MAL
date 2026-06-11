@@ -1,5 +1,5 @@
 import { getCache, setCache } from "@/lib/db";
-import { fetchPaginatedList, normalizeMediaList, normalizeProfile, requestJikan } from "@/lib/jikan";
+import { fetchMalXmlList, fetchPaginatedList, normalizeMediaList, normalizeProfile, requestJikan } from "@/lib/jikan";
 import type { DashboardPayload, MediaItem, MediaKind, NormalizedProfile } from "@/lib/types";
 import { buildStats, isFresh } from "@/lib/utils";
 
@@ -30,15 +30,22 @@ export async function saveUsername(username: string) {
   return clean;
 }
 
-async function safeFetchList(path: string) {
+async function safeFetchList(username: string, kind: MediaKind, path: string) {
   try {
-    return await fetchPaginatedList(path);
+    const jikanItems = await fetchPaginatedList(path);
+    if (jikanItems.length > 0) return normalizeMediaList(jikanItems, kind);
   } catch (error) {
-    // Some MyAnimeList profiles are public while their Anime/Manga lists are
-    // blocked from Jikan. Do not fail the whole dashboard when one list fails.
-    console.warn(error instanceof Error ? error.message : error);
-    return [];
+    console.warn(`Jikan ${kind} list failed:`, error instanceof Error ? error.message : error);
   }
+
+  try {
+    const xmlItems = await fetchMalXmlList(username, kind);
+    if (xmlItems.length > 0) return xmlItems;
+  } catch (error) {
+    console.warn(`MAL XML ${kind} fallback failed:`, error instanceof Error ? error.message : error);
+  }
+
+  return [];
 }
 
 export async function syncUser(username: string) {
@@ -47,14 +54,12 @@ export async function syncUser(username: string) {
 
   const encoded = encodeURIComponent(clean);
   const profileRaw = await requestJikan<unknown>(`/users/${encoded}/full`);
-  const [animeRaw, mangaRaw] = await Promise.all([
-    safeFetchList(`/users/${encoded}/animelist`),
-    safeFetchList(`/users/${encoded}/mangalist`)
+  const [anime, manga] = await Promise.all([
+    safeFetchList(clean, "anime", `/users/${encoded}/animelist`),
+    safeFetchList(clean, "manga", `/users/${encoded}/mangalist`)
   ]);
 
   const profile = normalizeProfile(profileRaw);
-  const anime = normalizeMediaList(animeRaw, "anime");
-  const manga = normalizeMediaList(mangaRaw, "manga");
 
   await setCache(`profile:${clean}`, profile);
   await setCache(`anime:${clean}`, anime);
@@ -89,7 +94,7 @@ export async function getDashboard(forceSync = false): Promise<DashboardPayload>
       profile: synced.profile,
       anime: synced.anime,
       manga: synced.manga,
-      stats: buildStats(synced.anime, synced.manga),
+      stats: buildStats(synced.anime, synced.manga, synced.profile),
       username,
       lastSyncedAt: synced.syncedAt,
       fromCache: false
@@ -100,7 +105,7 @@ export async function getDashboard(forceSync = false): Promise<DashboardPayload>
     profile: profileCache.value,
     anime: animeCache.value,
     manga: mangaCache.value,
-    stats: buildStats(animeCache.value, mangaCache.value),
+    stats: buildStats(animeCache.value, mangaCache.value, profileCache.value),
     username,
     lastSyncedAt: lastSyncCache?.value?.syncedAt || lastSyncCache?.updatedAt,
     fromCache: true

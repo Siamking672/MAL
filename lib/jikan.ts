@@ -100,6 +100,102 @@ function statusFor(kind: MediaKind, rawStatus: any) {
   return map[value] || { label: rawStatus ? String(rawStatus) : "Unknown", key: rawStatus ? value : "unknown" };
 }
 
+
+const MAL_WEB_BASE = "https://myanimelist.net";
+
+function decodeXml(value: string | undefined) {
+  if (!value) return undefined;
+  let text = value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+  text = text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'");
+  return text.trim() || undefined;
+}
+
+function readXmlTag(block: string, tag: string) {
+  const match = block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return decodeXml(match?.[1]);
+}
+
+function toSafeDate(value: string | undefined) {
+  if (!value || value === "0000-00-00") return undefined;
+  return value;
+}
+
+function unixToIso(value: string | undefined) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return new Date(n * 1000).toISOString();
+}
+
+function animeTypeName(value: string | undefined) {
+  return ({ "1": "TV", "2": "OVA", "3": "Movie", "4": "Special", "5": "ONA", "6": "Music" } as Record<string, string>)[value || ""] || undefined;
+}
+
+function mangaTypeName(value: string | undefined) {
+  return ({ "1": "Manga", "2": "Novel", "3": "One-shot", "4": "Doujinshi", "5": "Manhwa", "6": "Manhua" } as Record<string, string>)[value || ""] || undefined;
+}
+
+function normalizeXmlMediaItem(block: string, kind: MediaKind): MediaItem | null {
+  const isAnime = kind === "anime";
+  const id = Number(readXmlTag(block, isAnime ? "series_animedb_id" : "series_mangadb_id") || 0);
+  if (!id) return null;
+
+  const progress = Number(readXmlTag(block, isAnime ? "my_watched_episodes" : "my_read_chapters") || 0) || 0;
+  const total = Number(readXmlTag(block, isAnime ? "series_episodes" : "series_chapters") || 0) || undefined;
+  const status = statusFor(kind, readXmlTag(block, "my_status"));
+  const image = readXmlTag(block, "series_image");
+  const title = readXmlTag(block, "series_title") || "Untitled";
+
+  return {
+    id,
+    kind,
+    title,
+    url: `${MAL_WEB_BASE}/${kind}/${id}`,
+    image,
+    mediaType: isAnime ? animeTypeName(readXmlTag(block, "series_type")) : mangaTypeName(readXmlTag(block, "series_type")),
+    status: status.label,
+    statusKey: status.key,
+    score: Number(readXmlTag(block, "my_score") || 0) || 0,
+    progress,
+    total,
+    progressLabel: total ? `${progress}/${total}` : String(progress || 0),
+    updatedAt: unixToIso(readXmlTag(block, "my_last_updated")),
+    userStartDate: toSafeDate(readXmlTag(block, "my_start_date")),
+    userEndDate: toSafeDate(readXmlTag(block, "my_finish_date"))
+  };
+}
+
+export async function fetchMalXmlList(username: string, kind: MediaKind): Promise<MediaItem[]> {
+  const url = `${MAL_WEB_BASE}/malappinfo.php?u=${encodeURIComponent(username)}&status=all&type=${kind}`;
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/xml,text/xml,*/*",
+      "User-Agent": "mal-dashboard/1.0"
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`MyAnimeList XML fallback failed ${response.status}: ${response.statusText}`);
+  }
+
+  const xml = await response.text();
+  if (/error\s*=\s*["']?invalid/i.test(xml) || xml.includes("Invalid username")) {
+    throw new Error(`MyAnimeList XML fallback could not read ${kind} list for "${username}".`);
+  }
+
+  const tag = kind === "anime" ? "anime" : "manga";
+  const blocks = xml.match(new RegExp(`<${tag}>[\\s\\S]*?<\\/${tag}>`, "gi")) || [];
+  return blocks
+    .map((block) => normalizeXmlMediaItem(block, kind))
+    .filter((item): item is MediaItem => Boolean(item));
+}
+
 export function normalizeProfile(raw: any): NormalizedProfile {
   const data = raw?.data || raw || {};
   return {

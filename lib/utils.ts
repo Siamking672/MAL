@@ -1,4 +1,4 @@
-import type { DashboardStats, MediaItem } from "@/lib/types";
+import type { DashboardStats, MediaItem, NormalizedProfile } from "@/lib/types";
 
 export function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -46,7 +46,7 @@ function topValues(items: MediaItem[], getter: (item: MediaItem) => string[] | u
     .map(([name, count]) => ({ name, count }));
 }
 
-export function buildStats(anime: MediaItem[], manga: MediaItem[]): DashboardStats {
+export function buildStats(anime: MediaItem[], manga: MediaItem[], profile?: NormalizedProfile | null): DashboardStats {
   const all = [...anime, ...manga];
   const scoreDistribution: Record<string, number> = {};
   for (let score = 1; score <= 10; score++) scoreDistribution[String(score)] = 0;
@@ -54,20 +54,27 @@ export function buildStats(anime: MediaItem[], manga: MediaItem[]): DashboardSta
     if (item.score > 0) scoreDistribution[String(item.score)] = (scoreDistribution[String(item.score)] || 0) + 1;
   }
 
+  const profileStats = profile?.statistics as any;
+  const profileAnime = profileStats?.anime || {};
+  const profileManga = profileStats?.manga || {};
+
+  const animeAverage = average(anime);
+  const mangaAverage = average(manga);
+
   return {
     anime: {
-      total: anime.length,
-      completed: anime.filter((item) => item.statusKey === "completed").length,
-      watching: anime.filter((item) => item.statusKey === "watching").length,
-      planning: anime.filter((item) => item.statusKey === "plan_to_watch").length,
-      averageScore: average(anime)
+      total: anime.length || Number(profileAnime.total_entries || 0),
+      completed: anime.filter((item) => item.statusKey === "completed").length || Number(profileAnime.completed || 0),
+      watching: anime.filter((item) => item.statusKey === "watching").length || Number(profileAnime.watching || 0),
+      planning: anime.filter((item) => item.statusKey === "plan_to_watch").length || Number(profileAnime.plan_to_watch || 0),
+      averageScore: animeAverage || Number(profileAnime.mean_score || 0)
     },
     manga: {
-      total: manga.length,
-      completed: manga.filter((item) => item.statusKey === "completed").length,
-      reading: manga.filter((item) => item.statusKey === "reading").length,
-      planning: manga.filter((item) => item.statusKey === "plan_to_read").length,
-      averageScore: average(manga)
+      total: manga.length || Number(profileManga.total_entries || 0),
+      completed: manga.filter((item) => item.statusKey === "completed").length || Number(profileManga.completed || 0),
+      reading: manga.filter((item) => item.statusKey === "reading").length || Number(profileManga.reading || 0),
+      planning: manga.filter((item) => item.statusKey === "plan_to_read").length || Number(profileManga.plan_to_read || 0),
+      averageScore: mangaAverage || Number(profileManga.mean_score || 0)
     },
     scoreDistribution,
     statusBreakdown: countBy(all, (item) => item.status),
