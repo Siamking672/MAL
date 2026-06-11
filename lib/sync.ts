@@ -30,14 +30,27 @@ export async function saveUsername(username: string) {
   return clean;
 }
 
+async function safeFetchList(path: string) {
+  try {
+    return await fetchPaginatedList(path);
+  } catch (error) {
+    // Some MyAnimeList profiles are public while their Anime/Manga lists are
+    // blocked from Jikan. Do not fail the whole dashboard when one list fails.
+    console.warn(error instanceof Error ? error.message : error);
+    return [];
+  }
+}
+
 export async function syncUser(username: string) {
   const clean = username.trim();
   if (!clean) throw new Error("MAL username is missing. Add MAL_USERNAME to .env.local or save it from Settings.");
 
   const encoded = encodeURIComponent(clean);
   const profileRaw = await requestJikan<unknown>(`/users/${encoded}/full`);
-  const animeRaw = await fetchPaginatedList(`/users/${encoded}/animelist`);
-  const mangaRaw = await fetchPaginatedList(`/users/${encoded}/mangalist`);
+  const [animeRaw, mangaRaw] = await Promise.all([
+    safeFetchList(`/users/${encoded}/animelist`),
+    safeFetchList(`/users/${encoded}/mangalist`)
+  ]);
 
   const profile = normalizeProfile(profileRaw);
   const anime = normalizeMediaList(animeRaw, "anime");

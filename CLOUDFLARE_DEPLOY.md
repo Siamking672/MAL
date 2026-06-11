@@ -83,4 +83,4 @@ Cloudflare Dashboard → Workers & Pages → your Worker → Settings → Domain
 
 ## Cloudflare/Turso import note
 
-This project imports Turso with `@tursodatabase/serverless/web` because Cloudflare Workers need the web driver. Do not change it back to `@tursodatabase/serverless`, or OpenNext/Cloudflare may fail while bundling the Worker.
+This project uses Turso SQL-over-HTTP directly with `fetch`, so no native database driver is bundled into the Cloudflare Worker.
